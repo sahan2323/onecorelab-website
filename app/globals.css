@@ -1,0 +1,170 @@
+@import "@fontsource/montserrat/400.css";
+@import "@fontsource/montserrat/500.css";
+@import "@fontsource/montserrat/600.css";
+@import "@fontsource/montserrat/700.css";
+@import "@fontsource/work-sans/400.css";
+@import "@fontsource/work-sans/500.css";
+@import "@fontsource/work-sans/600.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Design tokens — "Stark Precision" system.
+
+  TYPOGRAPHY
+    --font-display / --font-sans   Montserrat — a geometric sans used for
+                     both headings and body copy, per the design system.
+                     Headings take tighter letter-spacing for visual tension.
+    --font-label     Work Sans — labels, eyebrows and UI metadata only.
+                     Slightly wider letter-spacing at small sizes for
+                     scannability. `--font-mono` is aliased to it so existing
+                     `font-mono` / `.eyebrow` usages pick it up automatically.
+
+  COLOR
+    Values are stored as "H S% L%" triples (not hex) so Tailwind can apply
+    opacity modifiers like `bg-primary/10` via hsl(var(--primary) / <alpha>).
+
+    NOTE ON PRIMARY: the design doc's token block lists primary as #001e40
+    (near-black navy) while its written spec repeatedly specifies #1164B7
+    for buttons, focus rings and active borders. We use #1164B7 as the
+    interactive primary since that is what the component specs describe,
+    and keep the deep navy as `--ink` for footer/nav grounding.
+*/
+:root {
+  --font-display: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --font-label: "Work Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Work Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --radius: 1rem;
+
+  /* Light mode — architectural, restrained, high contrast */
+  --background: 0 0% 100%;          /* #ffffff pure canvas */
+  --foreground: 180 4% 11%;         /* #1a1c1c rich black */
+  --surface: 0 0% 98%;              /* #f9f9f9 section grouping */
+  --muted: 0 0% 93%;                /* #eeeeee */
+  --muted-foreground: 220 8% 29%;   /* #43474f */
+  --border: 227 13% 79%;            /* #c3c6d1 outline-variant */
+  --input: 227 13% 79%;
+  --ring: 210 83% 39%;              /* #1164b7 */
+  --primary: 210 83% 39%;           /* #1164b7 */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 93%;
+  --secondary-foreground: 180 4% 11%;
+  --destructive: 0 75% 42%;         /* #ba1a1a */
+  --destructive-foreground: 0 0% 100%;
+  --card: 0 0% 100%;
+  --card-foreground: 180 4% 11%;
+  --ink: 220 26% 14%;               /* #1a202c grounding navy */
+}
+
+.dark {
+  /* Dark counterpart — the source system is light-only, so this is derived:
+     same hues, inverted lightness, primary lifted for contrast on dark. */
+  --background: 200 6% 7%;
+  --foreground: 0 0% 98%;
+  --surface: 200 6% 10%;
+  --muted: 200 5% 15%;
+  --muted-foreground: 220 10% 70%;
+  --border: 220 8% 22%;
+  --input: 220 8% 22%;
+  --ring: 210 90% 60%;
+  --primary: 210 90% 60%;
+  --primary-foreground: 200 6% 7%;
+  --secondary: 200 5% 15%;
+  --secondary-foreground: 0 0% 98%;
+  --destructive: 0 63% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --card: 200 6% 10%;
+  --card-foreground: 0 0% 98%;
+  --ink: 220 26% 10%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html {
+  scroll-behavior: auto;
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+::selection {
+  background-color: hsl(var(--primary) / 0.25);
+}
+
+/* Reduced motion: kill scroll-driven and looping animation globally */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.reduce-motion * {
+  animation: none !important;
+  transition: none !important;
+}
+
+.eyebrow {
+  font-family: var(--font-label);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+.container-lab {
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
+  padding-inline: 1.5rem;
+}
+@media (min-width: 768px) {
+  .container-lab { padding-inline: 3rem; }
+}
+
+/* Nothing may make the document wider than the screen. Decorative blurs and
+   oversized mockups sit in overflow-hidden sections, but this is the backstop
+   that guarantees a phone never gets a sideways scroll. */
+html, body {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+/* Faint blueprint grid used behind the hero, masked to a soft ellipse. */
+.ocl-hero-wash {
+  background:
+    radial-gradient(60% 45% at 8% 6%, hsl(var(--primary) / 0.10), transparent 70%),
+    radial-gradient(55% 40% at 95% 96%, hsl(var(--primary) / 0.08), transparent 72%);
+}
+
+.ocl-hero-grid {
+  background-size: 64px 64px;
+  background-image:
+    linear-gradient(to right, hsl(var(--foreground) / 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--foreground) / 0.05) 1px, transparent 1px);
+  opacity: 0.5;
+}
+@media (min-width: 768px) {
+  .ocl-hero-grid {
+    opacity: 1;
+    -webkit-mask-image: radial-gradient(ellipse 78% 62% at 50% 42%, black 8%, transparent 76%);
+    mask-image: radial-gradient(ellipse 78% 62% at 50% 42%, black 8%, transparent 76%);
+  }
+}
