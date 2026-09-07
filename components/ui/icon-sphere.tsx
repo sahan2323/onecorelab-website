@@ -1,12 +1,15 @@
 "use client";
-// Adapted from the provided SphereImageGrid reference component. Core
-// mechanics kept faithful: Fibonacci sphere distribution, 3D rotation
-// matrices, drag-to-rotate with momentum physics, auto-rotation,
-// depth/distance-based scaling, and collision-avoidance scaling to keep
-// items from overlapping. Repurposed from a photo gallery (with a click-to-
-// enlarge modal) into a brand-icon "ball" for the Technology section — the
-// modal was dropped (enlarging a logo isn't useful) in favor of a small
-// hover label, and image nodes became icon badges.
+// Interactive 3D icon sphere — Fibonacci distribution, drag-to-rotate with
+// momentum, auto-rotation, depth scaling and fade.
+//
+// PERFORMANCE NOTE (why this is written imperatively):
+// The first version stored rotation in React state and called setRotation()
+// inside requestAnimationFrame. That re-rendered the whole component ~60x a
+// second and re-ran an O(n^2) overlap pass over every icon — enough to make
+// scrolling stutter badly on a phone, which is why it had to be disabled
+// there. Now the rAF loop mutates each element's transform directly through
+// refs and React never re-renders during animation, so it's cheap enough to
+// run on mobile too. React only renders the icons once.
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
@@ -19,6 +22,7 @@ export interface SphereIcon {
 
 export interface IconSphereProps {
   items: SphereIcon[];
+  /** Reference (desktop) size; the sphere scales down to fit its container. */
   containerSize?: number;
   sphereRadius?: number;
   dragSensitivity?: number;
@@ -30,308 +34,236 @@ export interface IconSphereProps {
   className?: string;
 }
 
-type Position3D = { x: number; y: number; z: number };
-type SphericalPosition = { theta: number; phi: number; radius: number };
-type WorldPosition = Position3D & {
-  scale: number;
-  zIndex: number;
-  isVisible: boolean;
-  fadeOpacity: number;
+type Spherical = { theta: number; phi: number };
+
+const toRad = (d: number) => d * (Math.PI / 180);
+const normalize = (a: number) => {
+  while (a > 180) a -= 360;
+  while (a < -180) a += 360;
+  return a;
 };
 
-const MATH = {
-  toRad: (d: number) => d * (Math.PI / 180),
-  normalizeAngle: (angle: number) => {
-    while (angle > 180) angle -= 360;
-    while (angle < -180) angle += 360;
-    return angle;
-  },
-};
+/** Even point distribution over a sphere. Deterministic — no re-randomising. */
+function fibonacciPoints(count: number): Spherical[] {
+  const golden = (1 + Math.sqrt(5)) / 2;
+  const inc = (2 * Math.PI) / golden;
+  const out: Spherical[] = [];
+  for (let i = 0; i < count; i++) {
+    const t = (i + 0.5) / count;
+    const phi = Math.acos(1 - 2 * t) * (180 / Math.PI);
+    const theta = ((inc * i) * (180 / Math.PI)) % 360;
+    out.push({ theta, phi });
+  }
+  return out;
+}
 
 export function IconSphere({
   items,
   containerSize = 520,
   sphereRadius = 220,
-  dragSensitivity = 0.5,
-  momentumDecay = 0.95,
-  maxRotationSpeed = 5,
+  dragSensitivity = 0.45,
+  momentumDecay = 0.94,
+  maxRotationSpeed = 6,
   baseItemScale = 0.16,
   autoRotate = true,
-  autoRotateSpeed = 0.15,
+  autoRotateSpeed = 0.14,
   className = "",
 }: IconSphereProps) {
-  const [isMounted, setIsMounted] = React.useState(false);
-  const [rotation, setRotation] = React.useState({ x: 12, y: 15 });
-  const [hovered, setHovered] = React.useState<string | null>(null);
-  const [positions, setPositions] = React.useState<SphericalPosition[]>([]);
-
-  // containerSize/sphereRadius are the reference (desktop) dimensions; the
-  // sphere measures its actual available width and scales everything down
-  // proportionally so it never overflows a narrow viewport.
   const wrapRef = React.useRef<HTMLDivElement>(null);
-  const [renderSize, setRenderSize] = React.useState(containerSize);
+  const stageRef = React.useRef<HTMLDivElement>(null);
+  const nodeRefs = React.useRef<(HTMLDivElement | null)[]>([]);
 
+  const [renderSize, setRenderSize] = React.useState(containerSize);
+  const [mounted, setMounted] = React.useState(false);
+  const [reduced, setReduced] = React.useState(false);
+
+  const points = React.useMemo(() => fibonacciPoints(items.length), [items.length]);
+
+  // Mutable animation state — deliberately outside React.
+  const rot = React.useRef({ x: 12, y: 15 });
+  const vel = React.useRef({ x: 0, y: 0 });
+  const dragging = React.useRef(false);
+  const lastPointer = React.useRef({ x: 0, y: 0 });
+  const active = React.useRef(true);
+  const raf = React.useRef(0);
+
+  React.useEffect(() => {
+    setMounted(true);
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduced(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  // Fit to the available width.
   React.useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(([entry]) => {
-      const available = entry.contentRect.width;
-      setRenderSize(Math.max(220, Math.min(containerSize, available)));
-    });
+    const ro = new ResizeObserver(([e]) =>
+      setRenderSize(Math.max(200, Math.min(containerSize, e.contentRect.width)))
+    );
     ro.observe(el);
     return () => ro.disconnect();
   }, [containerSize]);
 
-  const sizeScale = renderSize / containerSize;
-
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  const lastMouse = React.useRef({ x: 0, y: 0 });
-  const raf = React.useRef<number | null>(null);
-  const isDraggingRef = React.useRef(false);
-  const velocityRef = React.useRef({ x: 0, y: 0 });
-  const rotationRef = React.useRef({ x: 12, y: 15 });
-  const [isDragging, setIsDragging] = React.useState(false);
-
-  const baseItemSize = renderSize * baseItemScale;
-
-  const generatePositions = React.useCallback((): SphericalPosition[] => {
-    const out: SphericalPosition[] = [];
-    const count = items.length;
-    const golden = (1 + Math.sqrt(5)) / 2;
-    const angleIncrement = (2 * Math.PI) / golden;
-
-    for (let i = 0; i < count; i++) {
-      const t = i / count;
-      const inclination = Math.acos(1 - 2 * t);
-      const azimuth = angleIncrement * i;
-
-      let phi = inclination * (180 / Math.PI);
-      let theta = (azimuth * (180 / Math.PI)) % 360;
-
-      const poleBonus = Math.pow(Math.abs(phi - 90) / 90, 0.6) * 30;
-      phi = phi < 90 ? Math.max(8, phi - poleBonus) : Math.min(172, phi + poleBonus);
-      phi = 12 + (phi / 180) * 156;
-
-      const jitter = (Math.random() - 0.5) * 14;
-      theta = (theta + jitter) % 360;
-      phi = Math.max(2, Math.min(178, phi + (Math.random() - 0.5) * 8));
-
-      out.push({ theta, phi, radius: sphereRadius });
-    }
-    return out;
-  }, [items.length, sphereRadius]);
-
-  const worldPositions = React.useMemo((): WorldPosition[] => {
-    const base = positions.map((pos) => {
-      const thetaRad = MATH.toRad(pos.theta);
-      const phiRad = MATH.toRad(pos.phi);
-      const rotXRad = MATH.toRad(rotation.x);
-      const rotYRad = MATH.toRad(rotation.y);
-
-      let x = pos.radius * Math.sin(phiRad) * Math.cos(thetaRad);
-      let y = pos.radius * Math.cos(phiRad);
-      let z = pos.radius * Math.sin(phiRad) * Math.sin(thetaRad);
-
-      const x1 = x * Math.cos(rotYRad) + z * Math.sin(rotYRad);
-      const z1 = -x * Math.sin(rotYRad) + z * Math.cos(rotYRad);
-      x = x1;
-      z = z1;
-
-      const y2 = y * Math.cos(rotXRad) - z * Math.sin(rotXRad);
-      const z2 = y * Math.sin(rotXRad) + z * Math.cos(rotXRad);
-      y = y2;
-      z = z2;
-
-      const fadeStart = -10;
-      const fadeEnd = -sphereRadius * 0.65;
-      const isVisible = z > fadeEnd;
-      let fadeOpacity = 1;
-      if (z <= fadeStart) fadeOpacity = Math.max(0, (z - fadeEnd) / (fadeStart - fadeEnd));
-
-      const distanceFromCenter = Math.sqrt(x * x + y * y);
-      const distanceRatio = Math.min(distanceFromCenter / sphereRadius, 1);
-      const centerScale = Math.max(0.35, 1 - distanceRatio * 0.55);
-      const depthScale = (z + sphereRadius) / (2 * sphereRadius);
-      const scale = centerScale * Math.max(0.55, 0.75 + depthScale * 0.35);
-
-      // x/y/z are computed in stable logical units above (so the layout
-      // itself never re-randomizes on resize); only the final screen
-      // position is scaled to the actually-available render size.
-      return {
-        x: x * sizeScale,
-        y: y * sizeScale,
-        z: z * sizeScale,
-        scale,
-        zIndex: Math.round(1000 + z),
-        isVisible,
-        fadeOpacity,
-      };
-    });
-
-    // Collision avoidance — shrink items that overlap on screen.
-    const adjusted = [...base];
-    for (let i = 0; i < adjusted.length; i++) {
-      const a = adjusted[i];
-      if (!a.isVisible) continue;
-      let scale = a.scale;
-      const sizeA = baseItemSize * scale;
-      for (let j = 0; j < adjusted.length; j++) {
-        if (i === j) continue;
-        const b = adjusted[j];
-        if (!b.isVisible) continue;
-        const sizeB = baseItemSize * b.scale;
-        const d = Math.hypot(a.x - b.x, a.y - b.y);
-        const minDist = (sizeA + sizeB) / 2 + 20;
-        if (d < minDist && d > 0) {
-          const overlap = minDist - d;
-          const reduction = Math.max(0.45, 1 - (overlap / minDist) * 0.55);
-          scale = Math.min(scale, scale * reduction);
-        }
-      }
-      adjusted[i] = { ...a, scale: Math.max(0.3, scale) };
-    }
-    return adjusted;
-  }, [positions, rotation, sphereRadius, baseItemSize, sizeScale]);
-
-  const clampSpeed = React.useCallback(
-    (v: number) => Math.max(-maxRotationSpeed, Math.min(maxRotationSpeed, v)),
-    [maxRotationSpeed]
-  );
-
-  // Drag handlers — update refs synchronously (no React re-render mid-drag).
-  const onPointerDown = (clientX: number, clientY: number) => {
-    isDraggingRef.current = true;
-    setIsDragging(true);
-    velocityRef.current = { x: 0, y: 0 };
-    lastMouse.current = { x: clientX, y: clientY };
-  };
-  const onPointerMoveTo = (clientX: number, clientY: number) => {
-    if (!isDraggingRef.current) return;
-    const dx = clientX - lastMouse.current.x;
-    const dy = clientY - lastMouse.current.y;
-    const delta = { x: clampSpeed(-dy * dragSensitivity), y: clampSpeed(dx * dragSensitivity) };
-    rotationRef.current = {
-      x: MATH.normalizeAngle(rotationRef.current.x + delta.x),
-      y: MATH.normalizeAngle(rotationRef.current.y + delta.y),
-    };
-    velocityRef.current = delta;
-    setRotation(rotationRef.current);
-    lastMouse.current = { x: clientX, y: clientY };
-  };
-  const onPointerUp = () => {
-    isDraggingRef.current = false;
-    setIsDragging(false);
-  };
-
-  React.useEffect(() => setIsMounted(true), []);
-  React.useEffect(() => setPositions(generatePositions()), [generatePositions]);
-
-  // Only spin while actually on screen. Without this the loop ran for the
-  // whole page lifetime — on a phone that is a permanent CPU burn even when
-  // the sphere is nowhere near the viewport.
-  const activeRef = React.useRef(true);
+  // Only animate while visible and the tab is focused.
   React.useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const io = new IntersectionObserver(
-      ([e]) => { activeRef.current = e.isIntersecting; },
-      { threshold: 0.05 }
-    );
+    const io = new IntersectionObserver(([e]) => { active.current = e.isIntersecting; }, { threshold: 0.05 });
     io.observe(el);
-    const onVis = () => { if (document.hidden) activeRef.current = false; };
+    const onVis = () => { if (document.hidden) active.current = false; };
     document.addEventListener("visibilitychange", onVis);
     return () => { io.disconnect(); document.removeEventListener("visibilitychange", onVis); };
   }, []);
 
+  // Drag (mouse + touch).
   React.useEffect(() => {
-    if (!isMounted) return;
+    if (!mounted) return;
+    const stage = stageRef.current;
+    if (!stage) return;
 
-    // Each tick re-renders React and recomputes every icon's projected
-    // position (an O(n^2) overlap pass). At 60fps on a phone that is far
-    // more work than the effect is worth, so coarse-pointer devices get a
-    // lower cadence and reduced-motion devices get none at all.
+    const clamp = (v: number) => Math.max(-maxRotationSpeed, Math.min(maxRotationSpeed, v));
+
+    const down = (x: number, y: number) => {
+      dragging.current = true;
+      vel.current = { x: 0, y: 0 };
+      lastPointer.current = { x, y };
+    };
+    const move = (x: number, y: number) => {
+      if (!dragging.current) return;
+      const dx = x - lastPointer.current.x;
+      const dy = y - lastPointer.current.y;
+      const d = { x: clamp(-dy * dragSensitivity), y: clamp(dx * dragSensitivity) };
+      rot.current = { x: normalize(rot.current.x + d.x), y: normalize(rot.current.y + d.y) };
+      vel.current = d;
+      lastPointer.current = { x, y };
+    };
+    const up = () => { dragging.current = false; };
+
+    const onMouseDown = (e: MouseEvent) => { e.preventDefault(); down(e.clientX, e.clientY); };
+    const onMouseMove = (e: MouseEvent) => move(e.clientX, e.clientY);
+    const onTouchStart = (e: TouchEvent) => { const t = e.touches[0]; if (t) down(t.clientX, t.clientY); };
+    const onTouchMove = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!t || !dragging.current) return;
+      // Only swallow the gesture once we're actually dragging the sphere,
+      // so a normal vertical page scroll that starts here still works.
+      if (e.cancelable) e.preventDefault();
+      move(t.clientX, t.clientY);
+    };
+
+    stage.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", up);
+    stage.addEventListener("touchstart", onTouchStart, { passive: true });
+    stage.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", up);
+
+    return () => {
+      stage.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", up);
+      stage.removeEventListener("touchstart", onTouchStart);
+      stage.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", up);
+    };
+  }, [mounted, dragSensitivity, maxRotationSpeed]);
+
+  // The animation loop: pure DOM writes, zero React renders.
+  React.useEffect(() => {
+    if (!mounted || reduced) return;
+
+    const scale = renderSize / containerSize;
+    const radius = sphereRadius * scale;
+    const itemSize = renderSize * baseItemScale;
+    const half = renderSize / 2;
+
     const coarse = window.matchMedia("(pointer: coarse)").matches;
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const minFrameMs = coarse ? 1000 / 24 : 0;
+    const minFrame = coarse ? 1000 / 30 : 0; // 30fps is plenty on a phone
     let last = 0;
 
-    const tick = (now?: number) => {
-      const ts = now ?? 0;
-      if (reducedMotion || !activeRef.current) {
-        raf.current = requestAnimationFrame(tick);
-        return;
-      }
-      if (minFrameMs && ts - last < minFrameMs) {
-        raf.current = requestAnimationFrame(tick);
-        return;
-      }
-      last = ts;
+    const clamp = (v: number) => Math.max(-maxRotationSpeed, Math.min(maxRotationSpeed, v));
 
-      if (!isDraggingRef.current) {
-        const v = velocityRef.current;
-        const next = { x: v.x * momentumDecay, y: v.y * momentumDecay };
-        velocityRef.current =
-          !autoRotate && Math.abs(next.x) < 0.01 && Math.abs(next.y) < 0.01 ? { x: 0, y: 0 } : next;
-
-        let newY = rotationRef.current.y;
-        if (autoRotate) newY += autoRotateSpeed;
-        newY += clampSpeed(velocityRef.current.y);
-
-        rotationRef.current = {
-          x: MATH.normalizeAngle(rotationRef.current.x + clampSpeed(velocityRef.current.x)),
-          y: MATH.normalizeAngle(newY),
-        };
-        setRotation(rotationRef.current);
-      }
+    const tick = (now: number) => {
       raf.current = requestAnimationFrame(tick);
+      if (!active.current) return;
+      if (minFrame && now - last < minFrame) return;
+      last = now;
+
+      if (!dragging.current) {
+        vel.current.x *= momentumDecay;
+        vel.current.y *= momentumDecay;
+        if (!autoRotate && Math.abs(vel.current.x) < 0.01 && Math.abs(vel.current.y) < 0.01) {
+          vel.current.x = 0;
+          vel.current.y = 0;
+        }
+        rot.current = {
+          x: normalize(rot.current.x + clamp(vel.current.x)),
+          y: normalize(rot.current.y + (autoRotate ? autoRotateSpeed : 0) + clamp(vel.current.y)),
+        };
+      }
+
+      const rx = toRad(rot.current.x);
+      const ry = toRad(rot.current.y);
+      const cosX = Math.cos(rx), sinX = Math.sin(rx);
+      const cosY = Math.cos(ry), sinY = Math.sin(ry);
+
+      for (let i = 0; i < points.length; i++) {
+        const el = nodeRefs.current[i];
+        if (!el) continue;
+        const p = points[i];
+        const th = toRad(p.theta);
+        const ph = toRad(p.phi);
+
+        let x = radius * Math.sin(ph) * Math.cos(th);
+        let y = radius * Math.cos(ph);
+        let z = radius * Math.sin(ph) * Math.sin(th);
+
+        const x1 = x * cosY + z * sinY;
+        const z1 = -x * sinY + z * cosY;
+        x = x1; z = z1;
+
+        const y2 = y * cosX - z * sinX;
+        const z2 = y * sinX + z * cosX;
+        y = y2; z = z2;
+
+        // Depth: nearer icons render larger and fully opaque.
+        const depth = (z + radius) / (2 * radius);          // 0 (back) .. 1 (front)
+        const s = 0.55 + depth * 0.55;
+        const opacity = 0.25 + depth * 0.75;
+
+        el.style.transform =
+          `translate3d(${half + x - itemSize / 2}px, ${half + y - itemSize / 2}px, 0) scale(${s.toFixed(3)})`;
+        el.style.opacity = opacity.toFixed(3);
+        el.style.zIndex = String(1000 + Math.round(z));
+      }
     };
+
     raf.current = requestAnimationFrame(tick);
-    return () => {
-      if (raf.current) cancelAnimationFrame(raf.current);
-    };
-  }, [isMounted, momentumDecay, clampSpeed, autoRotate, autoRotateSpeed]);
+    return () => cancelAnimationFrame(raf.current);
+  }, [
+    mounted, reduced, renderSize, containerSize, sphereRadius, baseItemScale,
+    points, autoRotate, autoRotateSpeed, momentumDecay, maxRotationSpeed,
+  ]);
 
-  React.useEffect(() => {
-    if (!isMounted) return;
-    const mm = (e: MouseEvent) => onPointerMoveTo(e.clientX, e.clientY);
-    const mu = () => onPointerUp();
-    const tm = (e: TouchEvent) => {
-      if (e.touches[0]) onPointerMoveTo(e.touches[0].clientX, e.touches[0].clientY);
-    };
-    document.addEventListener("mousemove", mm);
-    document.addEventListener("mouseup", mu);
-    document.addEventListener("touchmove", tm, { passive: true });
-    document.addEventListener("touchend", mu);
-    return () => {
-      document.removeEventListener("mousemove", mm);
-      document.removeEventListener("mouseup", mu);
-      document.removeEventListener("touchmove", tm);
-      document.removeEventListener("touchend", mu);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMounted]);
+  const itemSize = renderSize * baseItemScale;
 
-  if (!isMounted) {
-    /**
-     * Server-rendered fallback. The 3D sphere needs measured geometry and
-     * rAF, so it can't render on the server — but shipping an empty box
-     * would mean crawlers and no-JS visitors see none of the stack at all.
-     * A plain wrapped grid of the same icons keeps the content real; the
-     * interactive sphere upgrades in after mount.
-     */
+  // Server render and reduced-motion both get a plain wrapped grid, so the
+  // icons are always visible and readable even without the animation.
+  if (!mounted || reduced) {
     return (
       <div ref={wrapRef} className={cn("mx-auto w-full", className)} style={{ maxWidth: containerSize }}>
-        <ul className="flex flex-wrap justify-center gap-3">
+        <ul className="flex flex-wrap justify-center gap-2.5">
           {items.map((item) => (
             <li
               key={item.id}
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-black/5"
               title={item.name}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-black/5"
             >
               <span className="sr-only">{item.name}</span>
-              <div className="h-[58%] w-[58%]" aria-hidden="true">
-                {item.render()}
-              </div>
+              <span className="h-[58%] w-[58%]" aria-hidden>{item.render()}</span>
             </li>
           ))}
         </ul>
@@ -342,47 +274,22 @@ export function IconSphere({
   return (
     <div ref={wrapRef} className={cn("mx-auto w-full", className)} style={{ maxWidth: containerSize }}>
       <div
-        ref={containerRef}
-        className={cn("relative mx-auto select-none", isDragging ? "cursor-grabbing" : "cursor-grab")}
-        style={{ width: renderSize, height: renderSize, perspective: 1200 }}
-        onMouseDown={(e) => {
-          e.preventDefault();
-          onPointerDown(e.clientX, e.clientY);
-        }}
-        onTouchStart={(e) => {
-          const t = e.touches[0];
-          if (t) onPointerDown(t.clientX, t.clientY);
-        }}
+        ref={stageRef}
+        className="relative mx-auto cursor-grab touch-pan-y select-none active:cursor-grabbing"
+        style={{ width: renderSize, height: renderSize }}
       >
-        {items.map((item, index) => {
-          const pos = worldPositions[index];
-          if (!pos || !pos.isVisible) return null;
-          const size = baseItemSize * pos.scale;
-          return (
-            <div
-              key={item.id}
-              className="absolute flex items-center justify-center rounded-full bg-white shadow-lg shadow-black/30 ring-1 ring-black/5 transition-transform duration-150"
-              style={{
-                width: size,
-                height: size,
-                left: renderSize / 2 + pos.x,
-                top: renderSize / 2 + pos.y,
-                opacity: pos.fadeOpacity,
-                transform: `translate(-50%, -50%) scale(${hovered === item.id ? 1.15 : 1})`,
-                zIndex: pos.zIndex,
-              }}
-              onMouseEnter={() => setHovered(item.id)}
-              onMouseLeave={() => setHovered((h) => (h === item.id ? null : h))}
-            >
-              <div className="h-[58%] w-[58%]">{item.render()}</div>
-              {hovered === item.id && (
-                <span className="pointer-events-none absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/80 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wide text-white">
-                  {item.name}
-                </span>
-              )}
-            </div>
-          );
-        })}
+        {items.map((item, i) => (
+          <div
+            key={item.id}
+            ref={(el) => { nodeRefs.current[i] = el; }}
+            title={item.name}
+            className="absolute left-0 top-0 flex items-center justify-center rounded-full bg-white shadow-lg shadow-black/25 ring-1 ring-black/5 will-change-transform"
+            style={{ width: itemSize, height: itemSize }}
+          >
+            <span className="sr-only">{item.name}</span>
+            <span className="h-[58%] w-[58%]" aria-hidden>{item.render()}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

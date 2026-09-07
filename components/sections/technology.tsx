@@ -58,25 +58,11 @@ export function Technology() {
       </div>
 
       <div className="relative z-10 mt-6 flex justify-center px-6">
-        {heavy ? (
-          <IconSphere items={ITEMS} containerSize={560} sphereRadius={230} className="max-w-[560px]" />
-        ) : (
-          /* Touch devices get the same icons as a plain wrapped grid. The
-             sphere needs a per-frame React re-render plus an O(n^2) overlap
-             pass, which is the single most expensive thing on the page. */
-          <ul className="flex max-w-[560px] flex-wrap justify-center gap-2.5">
-            {ITEMS.map((item) => (
-              <li
-                key={item.id}
-                title={item.name}
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-black/5"
-              >
-                <span className="sr-only">{item.name}</span>
-                <span className="h-[58%] w-[58%]" aria-hidden>{item.render()}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+        {/* Runs everywhere now — the sphere animates via direct DOM writes
+            instead of a React re-render per frame, so it's affordable on
+            mobile. It still falls back to a static grid under
+            prefers-reduced-motion. */}
+        <IconSphere items={ITEMS} containerSize={560} sphereRadius={230} className="max-w-[560px]" />
       </div>
     </section>
   );
