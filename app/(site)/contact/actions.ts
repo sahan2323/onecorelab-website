@@ -8,6 +8,7 @@ export type ContactActionState = {
   message?: string;
   fieldErrors?: Partial<Record<string, string>>;
 };
+import { sendEmail } from "@/services/email.service";
 
 export async function submitContactForm(
   _prev: ContactActionState,
@@ -33,6 +34,21 @@ export async function submitContactForm(
   try {
     await createContactSubmission(parsed.data);
     await trackEvent("contact_submit", "/contact");
+
+    // Send thank you email to user
+    await sendEmail({
+      to: parsed.data.email,
+      subject: "Thank You for Contacting OneCoreLabs!",
+      text: `Hi ${parsed.data.firstName},\n\nThank you for reaching out to us. We have received your message and will get back to you soon.\n\nBest regards,\nThe OneCoreLabs Team`,
+    });
+
+    // Send notification email to admin
+    await sendEmail({
+      to: "onecorelabs7@gmail.com",
+      subject: "New Contact Form Submission",
+      text: `New contact form submission received:\n\nName: ${parsed.data.firstName} ${parsed.data.lastName}\nEmail: ${parsed.data.email}\nCompany: ${parsed.data.company || "N/A"}\nPhone: ${parsed.data.phone || "N/A"}\nProject Type: ${parsed.data.projectType}\nBudget: ${parsed.data.budget}\nMessage:\n${parsed.data.message}`,
+    });
+
     return { status: "success" };
   } catch (err) {
     console.error("Failed to save contact submission", err);
