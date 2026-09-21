@@ -158,7 +158,7 @@ export function ChatWidget() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold tracking-tight">
-                    one<span className="text-primary">CoreLab</span> Assistant
+                                        Ony<span className="text-primary">xa</span>
                   </p>
                   <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
