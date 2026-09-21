@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalPage eyebrow="Legal" title="Privacy Policy" updated="1 January 2025">
+    <LegalPage eyebrow="Legal" title="Privacy Policy" updated="1 November 2025">
       <section>
         <h2>Who we are</h2>
         <p>
