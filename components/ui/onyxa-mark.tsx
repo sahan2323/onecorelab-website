@@ -1,191 +1,65 @@
-"use client";
 import * as React from "react";
-import { motion, AnimatePresence } from "motion/react";
-import { MessageCircle, X } from "lucide-react";
-import { OnyxaMark } from "@/components/ui/onyxa-mark";
-import { AgentChat, type AgentMessage } from "@/components/ui/agent-chat";
-import { STARTER_PROMPTS } from "@/lib/assistant-knowledge";
+import { cn } from "@/lib/utils";
 
 /**
- * Floating assistant bubble.
+ * Onyxa's avatar mark — a faceted onyx gem, since the name comes from onyx.
+ * Dark "onyx" disc with brand-blue facets, plus a faint rim so the disc keeps
+ * its edge on dark backgrounds. Self-contained: it brings its own disc, so
+ * don't wrap it in a coloured circle.
  *
- * Positioning note: ContactActionBar is already pinned to the bottom-centre
- * of the viewport, so this sits bottom-RIGHT and, on small screens, lifts
- * above that bar's height rather than landing on top of it.
- *
- * No backdrop-blur anywhere — it's a fixed, always-visible element, and a
- * blur there forces the compositor to re-sample the page behind it on every
- * scroll frame, which is what caused the mobile scroll stutter previously.
+ * Gradient ids go through useId() so two marks on one page can't clash.
  */
-export function ChatWidget() {
-  const [open, setOpen] = React.useState(false);
-  const [messages, setMessages] = React.useState<AgentMessage[]>([]);
-  const [busy, setBusy] = React.useState(false);
-
-  // Close on Escape.
-  React.useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
-
-  const send = React.useCallback(
-    async (text: string) => {
-      const userMsg: AgentMessage = {
-        id: `u-${Date.now()}`,
-        role: "user",
-        content: text,
-      };
-      const history = [...messages, userMsg];
-      setMessages(history);
-      setBusy(true);
-
-      try {
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            messages: history.map(({ role, content }) => ({ role, content })),
-          }),
-        });
-
-        const data = (await res.json()) as { reply?: string; error?: string };
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `a-${Date.now()}`,
-            role: "assistant",
-            content:
-              data.reply ??
-              "Sorry — something went wrong on our side. Message us on WhatsApp (+1 437 707 8022) and we'll reply personally.",
-            isError: !data.reply,
-          },
-        ]);
-      } catch {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `a-${Date.now()}`,
-            role: "assistant",
-            content:
-              "I couldn't reach the server just then. Message us on WhatsApp (+1 437 707 8022) or email onecorelabs7@gmail.com.",
-            isError: true,
-          },
-        ]);
-      } finally {
-        setBusy(false);
-      }
-    },
-    [messages]
-  );
+export function OnyxaMark({ className }: { className?: string }) {
+  const uid = React.useId().replace(/:/g, "");
+  const bg = `onyxa-bg-${uid}`;
+  const crown = `onyxa-crown-${uid}`;
 
   return (
-    <>
-      {/* Bubble — bottom-right, lifted above the contact bar on mobile */}
-      <div className="fixed bottom-[5.5rem] right-4 z-40 sm:bottom-6 sm:right-6">
-        <motion.button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-label={open ? "Close Onyxa" : "Chat with Onyxa"}
-          aria-expanded={open}
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 1, type: "spring", stiffness: 320, damping: 22 }}
-          whileTap={{ scale: 0.92 }}
-          className="relative flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl shadow-black/20 transition-transform hover:scale-105"
-        >
-          <AnimatePresence mode="wait" initial={false}>
-            {open ? (
-              <motion.span
-                key="close"
-                initial={{ rotate: -90, opacity: 0 }}
-                animate={{ rotate: 0, opacity: 1 }}
-                exit={{ rotate: 90, opacity: 0 }}
-                transition={{ duration: 0.15 }}
-              >
-                <X className="h-6 w-6" />
-              </motion.span>
-            ) : (
-              <motion.span
-                key="open"
-                initial={{ rotate: 90, opacity: 0 }}
-                animate={{ rotate: 0, opacity: 1 }}
-                exit={{ rotate: -90, opacity: 0 }}
-                transition={{ duration: 0.15 }}
-              >
-                <MessageCircle className="h-6 w-6" />
-              </motion.span>
-            )}
-          </AnimatePresence>
+    <svg
+      viewBox="0 0 32 32"
+      className={cn("h-9 w-9", className)}
+      role="img"
+      aria-label="Onyxa"
+    >
+      <defs>
+        <linearGradient id={bg} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#1b2433" />
+          <stop offset="1" stopColor="#05070b" />
+        </linearGradient>
+        <linearGradient id={crown} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#8fc0ff" />
+          <stop offset="1" stopColor="#1164B7" />
+        </linearGradient>
+      </defs>
 
-          {/* Quiet attention pulse, only before first open */}
-          {!open && messages.length === 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/70" />
-              <span className="relative inline-flex h-3.5 w-3.5 rounded-full border-2 border-background bg-primary" />
-            </span>
-          )}
-        </motion.button>
-      </div>
+      <circle cx="16" cy="16" r="16" fill={`url(#${bg})`} />
+      <circle cx="16" cy="16" r="15.5" fill="none" stroke="#ffffff" strokeOpacity="0.14" />
 
-      <AnimatePresence>
-        {open && (
-          <>
-            {/* Dimmer on mobile only — the panel is a sheet there */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setOpen(false)}
-              className="fixed inset-0 z-40 bg-black/40 sm:hidden"
-            />
-
-            <motion.div
-              role="dialog"
-              aria-label="Onyxa, oneCoreLab's AI assistant"
-              initial={{ opacity: 0, y: 24, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 16, scale: 0.98 }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-              className="fixed inset-x-3 bottom-[9.5rem] z-40 flex h-[65vh] max-h-[560px] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl sm:inset-x-auto sm:bottom-24 sm:right-6 sm:h-[540px] sm:w-[380px]"
-            >
-              <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
-                <OnyxaMark className="h-9 w-9 shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold tracking-tight">
-                    Ony<span className="text-primary">xa</span>
-                  </p>
-                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    Usually replies instantly
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  aria-label="Close"
-                  className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </header>
-
-              <AgentChat
-                messages={messages}
-                onSend={send}
-                status={busy ? "streaming" : "ready"}
-                starters={STARTER_PROMPTS}
-              />
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-    </>
+      <g transform="translate(16 16.4) scale(1.13) translate(-16 -17)">
+        <polygon
+          points="11,9 21,9 25,14 16,25 7,14"
+          fill="#0b1220"
+          stroke="#5fa3ed"
+          strokeWidth="0.9"
+          strokeLinejoin="round"
+        />
+        <polygon points="11,9 16,9 13.5,14 7,14" fill={`url(#${crown})`} />
+        <polygon points="16,9 21,9 25,14 18.5,14" fill="#1164B7" opacity="0.55" />
+        <polygon points="16,9 18.5,14 13.5,14" fill="#2f82dc" opacity="0.8" />
+        <polygon points="7,14 13.5,14 16,25" fill="#1164B7" opacity="0.35" />
+        <polygon points="13.5,14 18.5,14 16,25" fill="#5fa3ed" opacity="0.25" />
+        <path
+          d="M7 14 H25 M13.5 14 L16 25 M18.5 14 L16 25 M13.5 14 L16 9 L18.5 14"
+          stroke="#9ecbff"
+          strokeWidth="0.6"
+          strokeOpacity="0.7"
+          fill="none"
+          strokeLinejoin="round"
+        />
+        <circle cx="12.3" cy="10.8" r="0.9" fill="#ffffff" opacity="0.9" />
+      </g>
+    </svg>
   );
 }
 
-export default ChatWidget;
+export default OnyxaMark;
