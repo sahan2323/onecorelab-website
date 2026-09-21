@@ -89,7 +89,7 @@ export function ChatWidget() {
         <motion.button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          aria-label={open ? "Close assistant" : "Open assistant"}
+                    aria-label={open ? "Close Onyxa" : "Chat with Onyxa"}
           aria-expanded={open}
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
