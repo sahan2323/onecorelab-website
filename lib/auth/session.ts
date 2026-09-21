@@ -47,7 +47,7 @@ export async function verifySessionToken(
 /** Sets the session cookie. Only callable from a Server Action or Route Handler. */
 export async function setSessionCookie(payload: SessionPayload) {
   const token = await createSessionToken(payload);
-  cookies().set(COOKIE_NAME, token, {
+  (await cookies()).set(COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -56,13 +56,13 @@ export async function setSessionCookie(payload: SessionPayload) {
   });
 }
 
-export function clearSessionCookie() {
-  cookies().delete(COOKIE_NAME);
+export async function clearSessionCookie() {
+  (await cookies()).delete(COOKIE_NAME);
 }
 
 /** Reads + verifies the session from Server Components / Actions / Route Handlers. */
 export async function getSession(): Promise<SessionPayload | null> {
-  const token = cookies().get(COOKIE_NAME)?.value;
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
   if (!token) return null;
   return verifySessionToken(token);
 }

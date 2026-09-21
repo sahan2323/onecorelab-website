@@ -5,11 +5,11 @@ import { permissions } from "@/lib/auth/rbac";
 import { StaffForm } from "@/components/admin/staff-form";
 import { updateStaffAction } from "../actions";
 
-export default async function EditStaffPage({ params }: { params: { id: string } }) {
+export default async function EditStaffPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session || !permissions.manageStaff(session.role)) redirect("/admin");
 
-  const id = Number(params.id);
+  const id = Number((await params).id);
   if (Number.isNaN(id)) notFound();
 
   const staff = await getStaffById(id);

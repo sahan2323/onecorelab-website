@@ -41,6 +41,6 @@ export async function loginAction(
 }
 
 export async function logoutAction() {
-  clearSessionCookie();
+  await clearSessionCookie();
   redirect("/admin/login");
 }

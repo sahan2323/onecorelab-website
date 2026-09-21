@@ -5,8 +5,8 @@ import { permissions } from "@/lib/auth/rbac";
 import { ProjectForm } from "@/components/admin/project-form";
 import { updateProjectAction } from "../actions";
 
-export default async function EditProjectPage({ params }: { params: { id: string } }) {
-  const id = Number(params.id);
+export default async function EditProjectPage({ params }: { params: Promise<{ id: string }> }) {
+  const id = Number((await params).id);
   if (Number.isNaN(id)) notFound();
 
   const [project, session] = await Promise.all([getProjectByIdForAdmin(id), getSession()]);

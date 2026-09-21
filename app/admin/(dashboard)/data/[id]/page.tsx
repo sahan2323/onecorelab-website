@@ -6,11 +6,11 @@ import { permissions } from "@/lib/auth/rbac";
 import { RecordForm } from "@/components/admin/record-form";
 import { updateRecordAction } from "../actions";
 
-export default async function EditRecordPage({ params }: { params: { id: string } }) {
+export default async function EditRecordPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session || !permissions.manageFinancialRecords(session.role)) redirect("/admin");
 
-  const id = Number(params.id);
+  const id = Number((await params).id);
   if (Number.isNaN(id)) notFound();
 
   const [record, staff] = await Promise.all([getRecordById(id), getAllStaff()]);
