@@ -1,7 +1,8 @@
 "use client";
 import * as React from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { MessageCircle, X, Sparkles } from "lucide-react";
+import { MessageCircle, X } from "lucide-react";
+import { OnyxaMark } from "@/components/ui/onyxa-mark";
 import { AgentChat, type AgentMessage } from "@/components/ui/agent-chat";
 import { STARTER_PROMPTS } from "@/lib/assistant-knowledge";
 
@@ -89,7 +90,7 @@ export function ChatWidget() {
         <motion.button
           type="button"
           onClick={() => setOpen((v) => !v)}
-                    aria-label={open ? "Close Onyxa" : "Chat with Onyxa"}
+          aria-label={open ? "Close Onyxa" : "Chat with Onyxa"}
           aria-expanded={open}
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -145,7 +146,7 @@ export function ChatWidget() {
 
             <motion.div
               role="dialog"
-              aria-label="oneCoreLab assistant"
+              aria-label="Onyxa, oneCoreLab's AI assistant"
               initial={{ opacity: 0, y: 24, scale: 0.97 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 16, scale: 0.98 }}
@@ -153,12 +154,10 @@ export function ChatWidget() {
               className="fixed inset-x-3 bottom-[9.5rem] z-40 flex h-[65vh] max-h-[560px] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl sm:inset-x-auto sm:bottom-24 sm:right-6 sm:h-[540px] sm:w-[380px]"
             >
               <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10">
-                  <Sparkles className="h-4 w-4 text-primary" strokeWidth={1.8} />
-                </span>
+                <OnyxaMark className="h-9 w-9 shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold tracking-tight">
-                                        Ony<span className="text-primary">xa</span>
+                    Ony<span className="text-primary">xa</span>
                   </p>
                   <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
