@@ -112,7 +112,7 @@ export function AgentChat({
 
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4" data-lenis-prevent>
         {isEmpty ? (
           <div className="flex h-full flex-col justify-center">
             <p className="font-display text-base font-semibold tracking-tight">{emptyTitle}</p>
@@ -165,6 +165,7 @@ export function AgentChat({
             }}
             placeholder="Type your message…"
             aria-label="Message"
+            data-lenis-prevent
             className="max-h-[110px] w-full resize-none bg-transparent text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
           />
           <button
