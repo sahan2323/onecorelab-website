@@ -17,6 +17,8 @@ export type AgentMessage = {
   role: "user" | "assistant";
   content: string;
   isError?: boolean;
+  /** Things the agent did while answering, e.g. "Enquiry sent to the team". */
+  actions?: string[];
 };
 
 function UserBubble({ text }: { text: string }) {
@@ -29,9 +31,62 @@ function UserBubble({ text }: { text: string }) {
   );
 }
 
-function AssistantBubble({ text, isError }: { text: string; isError?: boolean }) {
+/**
+ * Just enough markdown for chat replies: [links](/path) and **bold**.
+ * Everything else stays plain text (the bubble keeps whitespace-pre-wrap,
+ * so "* " bullets and line breaks already read fine).
+ */
+function renderInline(text: string, keyPrefix = ""): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  const re = /\[([^\]]+)\]\(((?:\/|https?:\/\/)[^)\s]+)\)|\*\*([^*]+)\*\*/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    if (m[1]) {
+      const external = m[2].startsWith("http");
+      out.push(
+        <a
+          key={keyPrefix + m.index}
+          href={m[2]}
+          {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+          className="font-medium text-primary underline underline-offset-2 hover:opacity-80"
+        >
+          {m[1]}
+        </a>
+      );
+    } else {
+      // Models often bold a link — **[Title](/path)** — so parse inside bold too.
+      out.push(<strong key={keyPrefix + m.index}>{renderInline(m[3], `${keyPrefix}${m.index}-`)}</strong>);
+    }
+    last = re.lastIndex;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+function AssistantBubble({
+  text,
+  isError,
+  actions = [],
+}: {
+  text: string;
+  isError?: boolean;
+  actions?: string[];
+}) {
   return (
-    <div className="flex justify-start">
+    <div className="flex flex-col items-start gap-1.5">
+      {actions.map((a) => (
+        <span
+          key={a}
+          className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          {a}
+        </span>
+      ))}
       <div
         className={cn(
           "max-w-[88%] whitespace-pre-wrap break-words rounded-2xl rounded-bl-md px-3.5 py-2 text-sm leading-relaxed",
@@ -40,7 +95,7 @@ function AssistantBubble({ text, isError }: { text: string; isError?: boolean })
             : "bg-muted text-foreground"
         )}
       >
-        {text}
+        {isError ? text : renderInline(text)}
       </div>
     </div>
   );
@@ -138,7 +193,7 @@ export function AgentChat({
               m.role === "user" ? (
                 <UserBubble key={m.id} text={m.content} />
               ) : (
-                <AssistantBubble key={m.id} text={m.content} isError={m.isError} />
+                <AssistantBubble key={m.id} text={m.content} isError={m.isError} actions={m.actions} />
               )
             )}
             {isBusy && <TypingIndicator />}

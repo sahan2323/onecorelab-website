@@ -48,7 +48,13 @@ COMMON QUESTIONS
 - We reply to enquiries within 24 hours, usually sooner.
 `.trim();
 
-export const SYSTEM_PROMPT = `You are the assistant on oneCoreLab's website. You help visitors understand what the studio does and guide them toward getting in touch.
+export const SYSTEM_PROMPT = `You are Onyxa, the AI agent on oneCoreLab's website. You help visitors understand what the studio does and guide them toward getting in touch. If asked your name, you are Onyxa.
+
+Tools:
+- When someone wants to see past work, call open_page with /projects so the site takes them there, and use list_projects to briefly mention a few highlights. If they pick one project, open_page its /projects/<slug> page. Only mention projects the tools return.
+- Use open_page the same way for services, about or the contact form when they want to see those. Say where you've taken them in a few words.
+- You can send an enquiry to the team for the visitor with submit_inquiry. Collect their name, email, what they want built and a sentence or two about it, read the details back, and only call it once they clearly say yes. Never make up a name or email.
+- After an enquiry is sent, confirm it and say the team replies within 24 hours.
 
 Rules:
 - Answer only from the facts below. If you don't know, say so plainly and point them to WhatsApp or the contact form. Never invent prices, timelines, clients or capabilities.
@@ -69,7 +75,7 @@ export const STARTER_PROMPTS = [
   "How do I get a quote?",
 ];
 
-type Rule = { keywords: string[]; answer: string };
+type Rule = { keywords: string[]; answer: string; navigate?: string };
 
 /**
  * Fallback answers for when no LLM key is set. Deliberately conservative —
@@ -100,6 +106,12 @@ const RULES: Rule[] = [
     keywords: ["stack", "technology", "tech", "framework", "language", "react", "next", "wordpress", "shopify"],
     answer:
       "We don't have a fixed house stack — we pick per project. Commonly TypeScript, React/Next.js, Node, Tailwind, and PostgreSQL or Supabase, with Stripe, Zapier or n8n where automation is involved.",
+  },
+  {
+    keywords: ["portfolio", "past work", "your work", "see your", "examples", "case stud", "projects", "previous work"],
+    answer:
+      "I've opened our projects page for you — websites, booking sites and custom web apps, each with a short write-up. Anything there similar to what you have in mind?",
+    navigate: "/projects",
   },
   {
     keywords: ["process", "how do you work", "steps", "workflow"],
@@ -137,9 +149,9 @@ const FALLBACK =
   "I'm not sure about that one — I'd rather point you to a human than guess. Message us on WhatsApp (+1 437 707 8022) or email onecorelabs7@gmail.com and you'll get a real answer within 24 hours.";
 
 /** Cheap keyword match. Scores by how many keywords hit, longest match wins. */
-export function answerFromKnowledge(question: string): string {
+export function answerFromKnowledge(question: string): { answer: string; navigate?: string } {
   const q = question.toLowerCase();
-  let best: { score: number; answer: string } | null = null;
+  let best: { score: number; rule: Rule } | null = null;
 
   for (const rule of RULES) {
     let score = 0;
@@ -147,9 +159,9 @@ export function answerFromKnowledge(question: string): string {
       if (q.includes(kw)) score += kw.length;
     }
     if (score > 0 && (!best || score > best.score)) {
-      best = { score, answer: rule.answer };
+      best = { score, rule };
     }
   }
 
-  return best ? best.answer : FALLBACK;
+  return best ? { answer: best.rule.answer, navigate: best.rule.navigate } : { answer: FALLBACK };
 }

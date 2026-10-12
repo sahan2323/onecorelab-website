@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { MessageCircle, X } from "lucide-react";
 import { OnyxaMark } from "@/components/ui/onyxa-mark";
@@ -21,6 +22,13 @@ export function ChatWidget() {
   const [open, setOpen] = React.useState(false);
   const [messages, setMessages] = React.useState<AgentMessage[]>([]);
   const [busy, setBusy] = React.useState(false);
+  const router = useRouter();
+
+  // Warm the pages Onyxa can open, so navigating feels instant.
+  React.useEffect(() => {
+    if (!open) return;
+    for (const path of ["/projects", "/services", "/about", "/contact"]) router.prefetch(path);
+  }, [open, router]);
 
   // Close on Escape.
   React.useEffect(() => {
@@ -52,7 +60,24 @@ export function ChatWidget() {
           }),
         });
 
-        const data = (await res.json()) as { reply?: string; error?: string };
+        const data = (await res.json()) as {
+          reply?: string;
+          error?: string;
+          actions?: { label: string; navigate?: string }[];
+        };
+
+        // The agent asked to show a page. Only same-site paths, never a URL.
+        const target = data.actions?.find((a) => a.navigate?.startsWith("/"))?.navigate;
+        if (target && !target.startsWith("//")) {
+          router.push(target);
+          // If the soft navigation stalls (slow first load), fall back to a
+          // normal page load so the visitor at least sees it happening.
+          window.setTimeout(() => {
+            if (window.location.pathname !== target) window.location.assign(target);
+          }, 4000);
+          // On phones the panel covers the page, so get out of the way.
+          if (window.matchMedia("(max-width: 639px)").matches) setOpen(false);
+        }
 
         setMessages((prev) => [
           ...prev,
@@ -63,6 +88,7 @@ export function ChatWidget() {
               data.reply ??
               "Sorry — something went wrong on our side. Message us on WhatsApp (+1 437 707 8022) and we'll reply personally.",
             isError: !data.reply,
+            actions: data.actions?.map((a) => a.label),
           },
         ]);
       } catch {
@@ -80,7 +106,7 @@ export function ChatWidget() {
         setBusy(false);
       }
     },
-    [messages]
+    [messages, router]
   );
 
   return (
