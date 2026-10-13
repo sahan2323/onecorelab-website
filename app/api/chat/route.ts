@@ -106,7 +106,7 @@ export async function POST(req: Request) {
           output = result.response;
           if (result.action) actions.push(result.action);
         } catch (err) {
-          console.error(`Onyxa tool ${name} failed`, err);
+          console.error(`Onycore tool ${name} failed`, err);
           output = { error: "That didn't work on our side. Suggest WhatsApp or email instead." };
         }
         results.push({ functionResponse: { id: call.id, name, response: output } });

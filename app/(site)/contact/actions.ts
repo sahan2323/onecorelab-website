@@ -38,8 +38,8 @@ export async function submitContactForm(
     // Send thank you email to user
     await sendEmail({
       to: parsed.data.email,
-      subject: "Thank You for Contacting OneCoreLabs!",
-      text: `Hi ${parsed.data.firstName},\n\nThank you for reaching out to us. We have received your message and will get back to you soon.\n\nBest regards,\nThe OneCoreLabs Team`,
+      subject: "Thank You for Contacting oneCoreLab!",
+      text: `Hi ${parsed.data.firstName},\n\nThank you for reaching out to us. We have received your message and will get back to you soon.\n\nBest regards,\nThe oneCoreLab Team`,
     });
 
     // Send notification email to admin

@@ -7,7 +7,7 @@ import { trackEvent } from "@/services/analytics.service";
 import { sendEmail } from "@/services/email.service";
 
 /**
- * Tools Onyxa can call. This is what turns the chat from a Q&A bot into an
+ * Tools Onycore can call. This is what turns the chat from a Q&A bot into an
  * agent: it can look up the live portfolio and file an enquiry on the
  * visitor's behalf instead of only pointing them at a form.
  *
@@ -211,7 +211,7 @@ export async function runTool(
         phone: "",
         projectType,
         budget: "Not specified",
-        message: `[Via Onyxa chat] ${message || "(no details)"}`,
+        message: `[Via Onycore chat] ${message || "(no details)"}`,
       });
       inquiryLog.get(ctx.clientId)?.push(Date.now());
       await trackEvent("contact_submit", "/chat");
@@ -220,16 +220,16 @@ export async function runTool(
       try {
         await sendEmail({
           to: email,
-          subject: "Thank You for Contacting OneCoreLabs!",
-          text: `Hi ${firstName},\n\nThanks for chatting with Onyxa. We've received your enquiry and will get back to you within 24 hours.\n\nWhat you told us:\n${message}\n\nBest regards,\nThe OneCoreLabs Team`,
+          subject: "Thank You for Contacting oneCoreLab!",
+          text: `Hi ${firstName},\n\nThanks for chatting with Onycore. We've received your enquiry and will get back to you within 24 hours.\n\nWhat you told us:\n${message}\n\nBest regards,\nThe oneCoreLab Team`,
         });
         await sendEmail({
           to: "onecorelabs7@gmail.com",
-          subject: "New enquiry via Onyxa chat",
+          subject: "New enquiry via Onycore chat",
           text: `New enquiry from the website chat:\n\nName: ${fullName}\nEmail: ${email}\nProject Type: ${projectType}\nMessage:\n${message}`,
         });
       } catch (err) {
-        console.error("Onyxa inquiry email failed", err);
+        console.error("Onycore inquiry email failed", err);
       }
 
       return {
